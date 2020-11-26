@@ -68,8 +68,6 @@ class Api
             return $this->_error('singer albums not found.');
         }
         $data = $result['albums']['items'];
-        echo count($data) . "\n";
-        die;
         return $this->_success($data);
     }
 
@@ -79,14 +77,14 @@ class Api
      * @param string $albumId
      * @return array
      */
-    public function getAlbumSongs($albumId, $index = 0, $num = 50)
+    public function getAlbumSongs($albumId, $index = 0, &$data = [])
     {
         $url = "https://api-jooxtt.sanook.com/openjoox/v1/album/$albumId/tracks";
         $param = [
             'country' => 'hk',
             'lang' => 'zh_TW',
             'index' => $index,
-            'num' => $num
+            'num' => 50
         ];
         $url .= '?' . http_build_query($param);
         try {
@@ -95,7 +93,19 @@ class Api
             return $this->_error('get singer albums failed, [' . $e->getCode() . '] ' . $e->getMessage());
         }
         $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
+        $result = json_decode($result, true);
+        if ($data) {
+            $track = $result['tracks'];
+            $data['songs'] = array_merge($data['songs'], $track['items']);
+        } else {
+            $data = $result;
+            $track = $data['tracks'];
+            $data['songs'] = $track['items'];
+            unset($data['vip_flag'], $data['error'], $data['tracks']);
+        }
+        if ($track['next_index'] > 0) {
+            $this->getAlbumSongs($albumId, $track['next_index'], $data);
+        }
         return $this->_success($data);
     }
 
