@@ -101,6 +101,7 @@ class Api
             $data = $result;
             $track = $data['tracks'];
             $data['songs'] = $track['items'];
+            $data['total_count'] = $track['total_count'];
             unset($data['vip_flag'], $data['error'], $data['tracks']);
         }
         if ($track['next_index'] > 0) {
