@@ -27,13 +27,10 @@ class Api
     public function getSingerInfo($singerId)
     {
         $url = "https://api-jooxtt.sanook.com/openjoox/v1/artist/{$singerId}?country=hk&lang=zh_TW";
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get singer info failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        $data = $this->_sendRequest($url);
+        if ($data === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
         return $this->_success($data);
     }
 
@@ -56,14 +53,10 @@ class Api
             'index' => ($page - 1) * $pageSize,
             'num' => $pageSize
         ];
-        $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get singer albums failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        $result = $this->_sendRequest($url, $param);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
         if (!isset($result['albums']['items'])) {
             return $this->_error('singer albums not found.');
         }
@@ -86,14 +79,10 @@ class Api
             'index' => $index,
             'num' => 50
         ];
-        $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get singer albums failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        $result = $this->_sendRequest($url, $param);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
         if ($data) {
             $track = $result['tracks'];
             $data['songs'] = array_merge($data['songs'], $track['items']);
@@ -129,14 +118,10 @@ class Api
             'index' => ($page - 1) * $pageSize,
             'num' => $pageSize
         ];
-        $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get singer songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        $result = $this->_sendRequest($url, $param);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
         if (!isset($result['tracks']['items'])) {
             return $this->_error('singer tracks not found.');
         }
@@ -160,16 +145,16 @@ class Api
             'id' => $songId,
             // 'device' => 'desktop'
         ];
-        $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get singer songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        $result = $this->_sendRequest($url, $param);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
         $data = $result['single'] ?: [];
-        $data['total_comments'] = $result['comments']['total_comments'];
+        if (!empty($result['comments']['total_comments'])) {
+            $data['total_comments'] = $result['comments']['total_comments'];
+        } else {
+            $data['total_comments'] = 0;
+        }
         $data['allowed_regions'] = $result['hreflangs']['allowed_regions'];
         return $this->_success($data);
     }
@@ -189,14 +174,10 @@ class Api
             'index' => $index,
             'num' => 50
         ];
-        $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get chart songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        $result = $this->_sendRequest($url, $param);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
         $songs = $result['tracks']['items'] ?: [];
         $data = array_merge($data, $songs);
         if ($result['tracks']['next_index'] > 0) {
@@ -214,13 +195,12 @@ class Api
     public function getSingersRankInfo($singerId)
     {
         $url = "https://api-jooxtt.sanook.com/openjoox/v1/toplists?country=hk&lang=zh_TW";
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get cahrt list failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        $result = $this->_sendRequest($url);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $chartlist = json_decode($result, true)['toplists'] ?: [];
+        
+        $chartlist = $result['toplists'] ?: [];
         $return = [];
         foreach ($chartlist as $rank) {
             $data = $this->getChartSongs($rank['id']);
@@ -250,6 +230,24 @@ class Api
             usleep(500);
         }
         return $this->_success($return);
+    }
+
+    private function _sendRequest($url, $param = [])
+    {
+        if ($param) {
+            $url .= '?' . http_build_query($param);
+        }
+        try {
+            $response = $this->_client->get($url);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            return $this->_error(__METHOD__. ', client error [' . $e->getCode() . '] ' . $e->getMessage(), false);
+        } catch (\GuzzleHttp\Exception\ServerException $e) {
+            return $this->_error(__METHOD__. ', server error [' . $e->getCode() . '] ' . $e->getMessage(), false);
+        } catch (\Exception $e) {
+            return $this->_error(__METHOD__. ', server error [' . $e->getCode() . '] ' . $e->getMessage(), false);
+        }
+        $result = $response->getBody()->getContents();
+        return json_decode($result, true);
     }
 
 
